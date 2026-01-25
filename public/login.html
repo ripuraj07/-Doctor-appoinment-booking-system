@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="container main-card">
+    <div class="card" style="max-width:420px;margin:3rem auto">
+      <div style="text-align:center;margin-bottom:0.5rem"><img src="/images/logo.svg" alt="logo" style="height:40px"></div>
+      <h2>Sign in</h2>
+      <p class="muted">Use your account</p>
+      <form id="form">
+        <div style="margin-top:1rem">
+          <label>Email</label><br>
+          <input id="email" type="email" required style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        </div>
+        <div style="margin-top:0.75rem">
+          <label>Password</label><br>
+          <input id="password" type="password" required style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:0.5rem;align-items:center">
+          <button class="btn" type="submit">Sign in</button>
+          <a href="/register.html" class="muted">Register</a>
+        </div>
+        <div id="msg" style="margin-top:0.75rem;color:#fca5a5"></div>
+      </form>
+    </div>
+  </main>
+
+<script>
+document.getElementById('form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const msg = document.getElementById('msg');
+  msg.textContent = '';
+  try{
+    const res = await fetch('/api/auth/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const data = await res.json();
+    if(!res.ok){ msg.textContent = data.message || 'Login failed'; return; }
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    if(data.user.role === 'admin') location.href = '/admin'; else location.href = '/user';
+  }catch(err){ msg.textContent = err.message; }
+});
+</script>
+</body>
+</html>

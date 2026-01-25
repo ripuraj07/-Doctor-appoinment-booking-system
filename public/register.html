@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Register</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="container main-card">
+    <div class="card" style="max-width:520px;margin:3rem auto">
+      <div style="text-align:center;margin-bottom:0.5rem"><img src="/images/logo.svg" alt="logo" style="height:40px"></div>
+      <h2>Create account</h2>
+      <p class="muted">Register a new user</p>
+      <form id="form" enctype="multipart/form-data">
+        <div style="margin-top:1rem">
+          <label>Name</label><br>
+          <input id="name" required style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        </div>
+        <div style="margin-top:0.75rem">
+          <label>Avatar (optional)</label><br>
+          <input id="avatar" type="file" accept="image/*" />
+          <div style="margin-top:0.5rem"><img id="avatarPreview" class="avatar" src="/images/avatar-placeholder.svg" alt="preview"></div>
+        </div>
+        <div style="margin-top:0.75rem">
+          <label>Email</label><br>
+          <input id="email" type="email" required style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        </div>
+        <div style="margin-top:0.75rem">
+          <label>Password</label><br>
+          <input id="password" type="password" required style="width:100%;padding:0.5rem;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        </div>
+        <div style="margin-top:1rem;display:flex;gap:0.5rem;align-items:center">
+          <button class="btn" type="submit">Register</button>
+          <a href="/login.html" class="muted">Sign in</a>
+        </div>
+        <div id="msg" style="margin-top:0.75rem;color:#fca5a5"></div>
+      </form>
+    </div>
+  </main>
+
+  <script>
+document.getElementById('avatar').addEventListener('change', (e)=>{
+  const f = e.target.files && e.target.files[0];
+  if(!f) return; const url = URL.createObjectURL(f); document.getElementById('avatarPreview').src = url;
+});
+
+document.getElementById('form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const name = document.getElementById('name').value;
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const avatarFile = document.getElementById('avatar').files[0];
+  const msg = document.getElementById('msg');
+  msg.textContent = '';
+  try{
+    const fd = new FormData();
+    fd.append('name', name);
+    fd.append('email', email);
+    fd.append('password', password);
+    if(avatarFile) fd.append('avatar', avatarFile);
+    const res = await fetch('/api/auth/register', {method:'POST', body: fd});
+    const data = await res.json();
+    if(!res.ok){ msg.textContent = data.message || 'Registration failed'; return; }
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    if(data.user.role === 'admin') location.href = '/admin'; else location.href = '/user';
+  }catch(err){ msg.textContent = err.message; }
+});
+</script>
+</body>
+</html>
