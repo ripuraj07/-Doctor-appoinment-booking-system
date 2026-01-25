@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>User Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <meta name="theme-color" content="#0f172a">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container" style="display:flex;align-items:center;gap:1rem">
+      <img id="meAvatar" src="/images/avatar-placeholder.svg" alt="avatar" class="small-avatar">
+      <div class="brand">Hospital Appointment</div>
+      <nav class="nav"><a href="/">Home</a> <a href="/admin">Admin</a></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-title">
+      <h1>User Dashboard</h1>
+      <p class="muted">Manage appointments and profile</p>
+    </div>
+
+    <div class="row">
+      <section class="card">
+        <h2>📅 Upcoming Appointments</h2>
+        <div id="upcomingAppointments" style="min-height:60px">
+          <p style="color:#999;font-style:italic">⏳ Loading appointments...</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>📋 Appointment History</h2>
+        <div id="appointmentHistory" style="min-height:60px">
+          <p style="color:#999;font-style:italic">⏳ Loading history...</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>➕ Book New Appointment</h2>
+        <div style="display:flex;flex-direction:column;gap:0.5rem">
+          <input id="doctor" placeholder="Doctor name" />
+          <input id="date" type="datetime-local" />
+          <textarea id="notes" placeholder="Notes" style="min-height:80px"></textarea>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <input id="triageSymptoms" placeholder="Symptoms (comma separated)" />
+            <select id="triageSeverity" style="padding:6px;border-radius:8px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.04)">
+              <option value="mild">Mild</option>
+              <option value="moderate">Moderate</option>
+              <option value="severe">Severe</option>
+            </select>
+          </div>
+          <input id="triagePhone" placeholder="Contact phone (optional)" />
+          <button class="btn" id="book">Book Appointment</button>
+          <div id="bookMsg" style="margin-top:0.5rem;padding:10px;border-radius:4px;display:none;"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="container footer">© Hospital Appointment Demo</footer>
+
+  <script>
+    const token = localStorage.getItem('token');
+    if(!token) location.href = '/login.html';
+    const localUser = JSON.parse(localStorage.getItem('user')||null) || {};
+    document.getElementById('meAvatar').src = localUser.avatar || '/images/avatar-placeholder.svg';
+
+    // Helper function to get status color
+    function getStatusColor(status) {
+      const colors = {
+        'pending': '#ff9800',
+        'confirmed': '#2196f3',
+        'completed': '#4caf50',
+        'cancelled': '#f44336'
+      };
+      return colors[status] || '#999';
+    }
+
+    // Load and display appointments
+    async function load() {
+      try{
+        console.log('[Load] Starting - Fetching appointments with token:', !!token);
+        
+        const res = await fetch('/api/appointments', {
+          headers:{'Authorization':'Bearer '+token}
+        });
+        
+        console.log('[Load] Response status:', res.status, res.statusText);
+        
+        if(!res.ok) {
+          const error = await res.json();
+          console.error('[Load] API error:', error);
+          throw new Error(error.message || 'Failed to fetch appointments');
+        }
+        
+        const data = await res.json();
+        console.log('[Load] Received', data.length, 'appointments:', data);
+        
+        const now = new Date();
+        
+        // Separate upcoming and all history
+        const upcoming = data.filter(a => new Date(a.date) >= now).sort((a, b) => new Date(a.date) - new Date(b.date));
+        const allHistory = data.sort((a, b) => new Date(b.date) - new Date(a.date)); // All appointments, newest first
+        
+        console.log('[Load] Upcoming:', upcoming.length, 'History:', allHistory.length);
+        
+        // Display upcoming appointments
+        const upcomingList = document.getElementById('upcomingAppointments');
+        upcomingList.innerHTML = '';
+        if(!upcoming.length) {
+          upcomingList.innerHTML = '<p style="color:#999;font-style:italic;padding:10px">No upcoming appointments booked yet.</p>';
+        } else {
+          const ul = document.createElement('ul');
+          ul.style.listStyle = 'none';
+          ul.style.padding = '0';
+          ul.style.margin = '0';
+          upcoming.forEach(a=>{
+            const li = document.createElement('li');
+            const dateStr = new Date(a.date).toLocaleString();
+            const statusBadge = `<span style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:0.85rem;background:${getStatusColor(a.status)};margin-left:8px;color:white;font-weight:bold">${a.status.toUpperCase()}</span>`;
+            li.innerHTML = `<strong>${dateStr}</strong> — <strong>${a.doctor}</strong> ${statusBadge}${a.notes ? '<br/><small style="color:#aaa;margin-top:4px">📝 ' + a.notes + '</small>' : ''}`;
+            li.style.padding = '12px';
+            li.style.marginBottom = '8px';
+            li.style.borderLeft = '4px solid ' + getStatusColor(a.status);
+            li.style.backgroundColor = 'rgba(255,255,255,0.02)';
+            li.style.borderRadius = '4px';
+            ul.appendChild(li);
+          });
+          upcomingList.appendChild(ul);
+        }
+
+        // Display ALL appointment history
+        const historyList = document.getElementById('appointmentHistory');
+        historyList.innerHTML = '';
+        if(!allHistory.length) {
+          historyList.innerHTML = '<p style="color:#999;font-style:italic;padding:10px">No appointments in history yet.</p>';
+        } else {
+          const ul = document.createElement('ul');
+          ul.style.listStyle = 'none';
+          ul.style.padding = '0';
+          ul.style.margin = '0';
+          allHistory.forEach(a=>{
+            const li = document.createElement('li');
+            const dateStr = new Date(a.date).toLocaleString();
+            const statusBadge = `<span style="display:inline-block;padding:4px 10px;border-radius:4px;font-size:0.85rem;background:${getStatusColor(a.status)};margin-left:8px;color:white;font-weight:bold">${a.status.toUpperCase()}</span>`;
+            li.innerHTML = `<strong>${dateStr}</strong> — <strong>${a.doctor}</strong> ${statusBadge}${a.notes ? '<br/><small style="color:#aaa;margin-top:4px">📝 ' + a.notes + '</small>' : ''}`;
+            li.style.padding = '12px';
+            li.style.marginBottom = '8px';
+            li.style.borderLeft = '4px solid ' + getStatusColor(a.status);
+            li.style.backgroundColor = 'rgba(255,255,255,0.02)';
+            li.style.borderRadius = '4px';
+            ul.appendChild(li);
+          });
+          historyList.appendChild(ul);
+        }
+        
+        console.log('[Load] Completed successfully');
+      }catch(err){
+        console.error('[Load] Error:', err.message, err);
+        const upcomingList = document.getElementById('upcomingAppointments');
+        const historyList = document.getElementById('appointmentHistory');
+        const errorMsg = '❌ Error: ' + err.message;
+        upcomingList.innerHTML = `<p style="color:#f44336;padding:10px">${errorMsg}</p>`;
+        historyList.innerHTML = `<p style="color:#f44336;padding:10px">${errorMsg}</p>`;
+      }
+    }
+
+    // Profile area
+    const profileCard = document.createElement('section'); profileCard.className='card';
+    profileCard.innerHTML = `<h2>Your Profile</h2><div style="display:flex;gap:1rem;align-items:center"><img id="profileAvatar" class="avatar" src="${localUser.avatar||'/images/avatar-placeholder.svg'}"><div style="flex:1"><div><strong id="profileName">${localUser.name||''}</strong></div><div class="muted-small">${localUser.email||''}</div><div style="margin-top:0.5rem"><button id="editProfile" class="btn ghost">Edit profile</button> <button id="logout" class="btn">Logout</button></div></div></div>`;
+    document.querySelector('.container').insertBefore(profileCard, document.querySelector('.row'));
+
+    document.getElementById('logout').addEventListener('click', ()=>{ localStorage.removeItem('token'); localStorage.removeItem('user'); location.href='/login.html'; });
+
+    document.getElementById('editProfile').addEventListener('click', ()=>{
+      const form = document.createElement('form'); form.style.display='flex'; form.style.flexDirection='column'; form.style.gap='0.5rem';
+      const nameIn = document.createElement('input'); nameIn.value = localUser.name||''; nameIn.placeholder='Name';
+      const fileIn = document.createElement('input'); fileIn.type='file'; fileIn.accept='image/*';
+      const save = document.createElement('button'); save.className='btn'; save.textContent='Save';
+      const cancel = document.createElement('button'); cancel.className='btn ghost'; cancel.type='button'; cancel.textContent='Cancel';
+      form.appendChild(nameIn); form.appendChild(fileIn); form.appendChild(save); form.appendChild(cancel);
+      profileCard.appendChild(form);
+      cancel.addEventListener('click', ()=> form.remove());
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const fd = new FormData(); fd.append('name', nameIn.value);
+        if(fileIn.files[0]) fd.append('avatar', fileIn.files[0]);
+        try{
+          const res = await fetch('/api/auth/profile', {method:'PUT', headers:{'Authorization':'Bearer '+token}, body:fd});
+          const data = await res.json(); if(!res.ok){ alert(data.message||'Error'); return; }
+          localStorage.setItem('user', JSON.stringify(data)); document.getElementById('profileName').textContent = data.name; document.getElementById('profileAvatar').src = data.avatar||'/images/avatar-placeholder.svg'; document.getElementById('meAvatar').src = data.avatar||'/images/avatar-placeholder.svg'; form.remove();
+        }catch(err){ alert(err.message); }
+      });
+    });
+
+    // Book appointment event listener
+    document.getElementById('book').addEventListener('click', async ()=>{
+      const doctor = document.getElementById('doctor').value.trim();
+      const dateRaw = document.getElementById('date').value;
+      const notes = document.getElementById('notes').value.trim();
+      const msgEl = document.getElementById('bookMsg');
+      
+      // Reset message
+      msgEl.textContent = '';
+      msgEl.style.display = 'none';
+      
+      // Validation
+      if(!doctor){ 
+        msgEl.textContent = '⚠️ Please enter doctor name'; 
+        msgEl.style.display='block'; 
+        msgEl.style.backgroundColor='#ffebee'; 
+        msgEl.style.color='#c62828'; 
+        console.warn('[Booking] Validation failed: missing doctor name');
+        return; 
+      }
+      
+      if(!dateRaw){ 
+        msgEl.textContent = '⚠️ Please choose date/time'; 
+        msgEl.style.display='block'; 
+        msgEl.style.backgroundColor='#ffebee'; 
+        msgEl.style.color='#c62828'; 
+        console.warn('[Booking] Validation failed: missing date');
+        return; 
+      }
+      
+      // Normalize date to ISO
+      let date;
+      try{ 
+        date = new Date(dateRaw); 
+        if(isNaN(date.getTime())) throw new Error('Invalid date format'); 
+        date = date.toISOString(); 
+        console.log('[Booking] Date converted:', dateRaw, '->', date);
+      }catch(e){ 
+        msgEl.textContent = '⚠️ Invalid date format: ' + e.message; 
+        msgEl.style.display='block'; 
+        msgEl.style.backgroundColor='#ffebee'; 
+        msgEl.style.color='#c62828'; 
+        console.error('[Booking] Date error:', e);
+        return; 
+      }
+      
+      const symptoms = document.getElementById('triageSymptoms').value.split(',').map(s=>s.trim()).filter(Boolean);
+      const severity = document.getElementById('triageSeverity').value;
+      const phone = document.getElementById('triagePhone').value.trim();
+      
+      try{
+        const btn = document.getElementById('book');
+        btn.disabled = true;
+        btn.textContent = 'Booking...';
+        msgEl.textContent = '';
+        msgEl.style.display = 'none';
+        
+        const payload = {
+          doctor, 
+          date, 
+          notes, 
+          triage:{
+            symptoms, 
+            severity, 
+            phone
+          }
+        };
+        
+        console.log('[Booking] Submitting appointment:', {
+          doctor,
+          date: new Date(date).toLocaleString(),
+          notes: notes || '(no notes)',
+          symptoms: symptoms.length > 0 ? symptoms : '(none)',
+          severity,
+          phone: phone || '(not provided)',
+          tokenPresent: !!token
+        });
+        
+        const res = await fetch('/api/appointments', {
+          method:'POST',
+          headers:{
+            'Content-Type':'application/json',
+            'Authorization':'Bearer '+token
+          },
+          body:JSON.stringify(payload)
+        });
+        
+        console.log('[Booking] Response status:', res.status, res.statusText);
+        
+        const data = await res.json();
+        console.log('[Booking] Response body:', data);
+        
+        if(!res.ok){
+          const errorMsg = data.message || data.error || 'Unknown error';
+          msgEl.textContent = '❌ Booking failed: ' + errorMsg;
+          msgEl.style.display = 'block';
+          msgEl.style.backgroundColor = '#ffebee';
+          msgEl.style.color = '#c62828';
+          console.error('[Booking] Failed:', errorMsg);
+          btn.disabled = false;
+          btn.textContent = 'Book Appointment';
+          return;
+        }
+        
+        console.log('[Booking] Success! Appointment ID:', data._id);
+        msgEl.textContent = '✅ Appointment booked successfully! Appointment ID: ' + data._id + '. Check the sections below to see your appointment.';
+        msgEl.style.display = 'block';
+        msgEl.style.backgroundColor = '#e8f5e9';
+        msgEl.style.color = '#2e7d32';
+        msgEl.style.fontWeight = 'bold';
+        
+        // Clear form
+        console.log('[Booking] Clearing form');
+        document.getElementById('doctor').value = '';
+        document.getElementById('date').value = '';
+        document.getElementById('notes').value = '';
+        document.getElementById('triageSymptoms').value = '';
+        document.getElementById('triageSeverity').value = 'mild';
+        document.getElementById('triagePhone').value = '';
+        
+        // Wait a moment then reload
+        console.log('[Booking] Waiting 1 second before reload...');
+        await new Promise(r => setTimeout(r, 1000));
+        
+        console.log('[Booking] Reloading appointment list');
+        await load();
+        
+        btn.disabled = false;
+        btn.textContent = 'Book Appointment';
+        
+      }catch(err){
+        console.error('[Booking] Exception:', err);
+        msgEl.textContent = '❌ Error: ' + err.message;
+        msgEl.style.display = 'block';
+        msgEl.style.backgroundColor = '#ffebee';
+        msgEl.style.color = '#c62828';
+        const btn = document.getElementById('book');
+        btn.disabled = false;
+        btn.textContent = 'Book Appointment';
+      }
+    });
+
+    // Initial load
+    console.log('[Init] Page loaded. Token present:', !!token, 'User:', localUser.name || 'Anonymous');
+    console.log('[Init] Starting appointment list load');
+    load().catch(err => {
+      console.error('[Init] Load failed:', err);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Admin </title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <meta name="theme-color" content="#0f172a">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container" style="display:flex;align-items:center;gap:1rem">
+      <img id="meAvatar" src="/images/avatar-placeholder.svg" alt="avatar" class="small-avatar">
+      <div class="brand">Hospital Appointment</div>
+      <nav class="nav"><a href="/">Home</a> <a href="/user">User</a></nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-title">
+      <h1>Admin</h1>
+      <p class="muted">Overview and management</p>
+    </div>
+
+    <div class="row">
+      <section class="card metrics">
+        <div class="metric">
+          <div class="metric-value" id="totalUsers">—</div>
+          <div class="metric-label">Total Users</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value" id="pending">—</div>
+          <div class="metric-label">Pending Appointments</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Appointments</h3>
+        <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+          <button id="tabOverview" class="btn">Overview</button>
+          <button id="tabHistory" class="btn ghost">History</button>
+        </div>
+        <div id="appts" style="margin-top:0.75rem">Loading...</div>
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center">
+          <button id="tabOverview" class="btn">Overview</button>
+          <button id="tabHistory" class="btn ghost">History</button>
+          <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
+            <label class="muted-small">Page size:</label>
+            <select id="pageSize" style="padding:6px;border-radius:8px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.04)"><option>5</option><option selected>10</option><option>20</option></select>
+            <button id="exportCsv" class="btn ghost">Export CSV</button>
+          </div>
+        </div>
+        <div id="appts" style="margin-top:0.75rem">Loading...</div>
+        <div id="history" style="margin-top:0.75rem;display:none">
+          <div id="historyTable">Loading...</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem">
+            <div>
+              <button id="prevPage" class="btn ghost">Prev</button>
+              <button id="nextPage" class="btn ghost">Next</button>
+            </div>
+            <div class="muted-small" id="pageInfo">Page 1</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="container footer">© Hospital Appointment Demo</footer>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const user = JSON.parse(localStorage.getItem('user')||null);
+    if(!token || !user || user.role !== 'admin') location.href = '/login.html';
+    document.getElementById('meAvatar').src = (user && user.avatar) ? user.avatar : '/images/avatar-placeholder.svg';
+
+    let historyData = [];
+    let currentPage = 1;
+    let pageSize = parseInt(document.getElementById('pageSize').value,10) || 10;
+
+    async function load(){
+      try{
+        const r1 = await fetch('/api/admin/users', {headers:{'Authorization':'Bearer '+token}});
+        const users = await r1.json();
+        document.getElementById('totalUsers').textContent = users.length;
+
+        const r2 = await fetch('/api/admin/appointments', {headers:{'Authorization':'Bearer '+token}});
+        const appts = await r2.json();
+        document.getElementById('pending').textContent = appts.filter(a=>a.status==='pending').length;
+
+        renderOverview(appts);
+        historyData = appts;
+        renderHistoryPage();
+      }catch(err){ console.error(err); }
+    }
+
+    function renderOverview(appts){
+      const el = document.getElementById('appts'); el.innerHTML = '';
+      const upcoming = appts.filter(a=> new Date(a.date) >= new Date()).sort((x,y)=>new Date(x.date)-new Date(y.date));
+      if(!upcoming.length) el.innerHTML = '<div class="muted-small">No upcoming appointments.</div>';
+      upcoming.forEach(a=>{
+        const div = document.createElement('div'); div.className='card';
+        div.innerHTML = `<strong>${new Date(a.date).toLocaleString()}</strong><div>${a.doctor}</div><div>${a.patient?.name||''} (${a.patient?.email||''})</div><div>Status: ${a.status}</div>`;
+        el.appendChild(div);
+      });
+    }
+
+    function renderHistoryPage(){
+      const el = document.getElementById('historyTable'); el.innerHTML = '';
+      const past = historyData.filter(a=> new Date(a.date) < new Date()).sort((x,y)=>new Date(y.date)-new Date(x.date));
+      if(!past.length){ el.innerHTML = '<div class="muted-small">No history yet.</div>'; document.getElementById('pageInfo').textContent = 'Page 0'; return; }
+      pageSize = parseInt(document.getElementById('pageSize').value,10) || 10;
+      const totalPages = Math.max(1, Math.ceil(past.length / pageSize));
+      if(currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage-1)*pageSize; const end = start + pageSize;
+      const pageItems = past.slice(start,end);
+
+      const table = document.createElement('table'); table.style.width='100%'; table.style.borderSpacing='0 8px';
+      table.innerHTML = `<thead><tr style="text-align:left"><th>Date</th><th>Doctor</th><th>Patient</th><th>Status</th><th>Action</th></tr></thead>`;
+      const tbody = document.createElement('tbody');
+      pageItems.forEach(a=>{
+        const tr = document.createElement('tr'); tr.style.borderTop='1px solid rgba(255,255,255,0.03)'; tr.style.padding='8px 0';
+        const dateTd = `<td style="padding:8px; vertical-align:middle">${new Date(a.date).toLocaleString()}</td>`;
+        const docTd = `<td style="padding:8px; vertical-align:middle">${a.doctor}</td>`;
+        const patTd = `<td style="padding:8px; vertical-align:middle">${a.patient?.name||''} (${a.patient?.email||''})</td>`;
+        const statusTd = `<td style="padding:8px; vertical-align:middle"><select data-id="${a._id}" class="statusSelect" style="padding:6px;border-radius:8px;background:transparent;color:inherit;border:1px solid rgba(255,255,255,0.04)"><option ${a.status==='pending'?'selected':''}>pending</option><option ${a.status==='confirmed'?'selected':''}>confirmed</option><option ${a.status==='completed'?'selected':''}>completed</option><option ${a.status==='cancelled'?'selected':''}>cancelled</option></select></td>`;
+        const actionTd = `<td style="padding:8px; vertical-align:middle"><button data-id="${a._id}" class="btn updateStatus">Update</button></td>`;
+        tr.innerHTML = dateTd + docTd + patTd + statusTd + actionTd;
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody); el.appendChild(table);
+      document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+
+      // attach update handlers
+      document.querySelectorAll('.updateStatus').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const id = btn.getAttribute('data-id');
+          const sel = document.querySelector(`.statusSelect[data-id="${id}"]`);
+          const newStatus = sel.value;
+          try{
+            const r = await fetch('/api/admin/appointments/'+id, {method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body: JSON.stringify({status:newStatus})});
+            const res = await r.json();
+            if(!r.ok){ alert(res.message||'Update failed'); return; }
+            // update local historyData
+            const idx = historyData.findIndex(x=>x._id===id);
+            if(idx>-1) historyData[idx].status = res.status;
+            renderHistoryPage();
+          }catch(err){ alert(err.message); }
+        });
+      });
+    }
+
+    document.getElementById('tabOverview').addEventListener('click', ()=>{ document.getElementById('appts').style.display='block'; document.getElementById('history').style.display='none'; document.getElementById('tabOverview').classList.remove('ghost'); document.getElementById('tabHistory').classList.add('ghost'); });
+    document.getElementById('tabHistory').addEventListener('click', ()=>{ document.getElementById('appts').style.display='none'; document.getElementById('history').style.display='block'; document.getElementById('tabHistory').classList.remove('ghost'); document.getElementById('tabOverview').classList.add('ghost'); });
+
+    document.getElementById('pageSize').addEventListener('change', ()=>{ currentPage = 1; renderHistoryPage(); });
+    document.getElementById('prevPage').addEventListener('click', ()=>{ if(currentPage>1){ currentPage--; renderHistoryPage(); } });
+    document.getElementById('nextPage').addEventListener('click', ()=>{ currentPage++; renderHistoryPage(); });
+
+    document.getElementById('exportCsv').addEventListener('click', ()=>{
+      const past = historyData.filter(a=> new Date(a.date) < new Date()).sort((x,y)=>new Date(y.date)-new Date(x.date));
+      if(!past.length){ alert('No data to export'); return; }
+      const rows = [['date','doctor','patient_name','patient_email','status']];
+      past.forEach(a=> rows.push([new Date(a.date).toISOString(), a.doctor, a.patient?.name||'', a.patient?.email||'', a.status]));
+      const csv = rows.map(r=> r.map(c=> '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'appointments-history.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('prevPage').disabled = false; document.getElementById('nextPage').disabled = false;
+
+    load();
+  </script>
+</body>
+</html>
